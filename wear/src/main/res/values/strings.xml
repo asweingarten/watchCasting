@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Watchcasting</string>
+    <string name="hello_round">Watchcasting is running  and sending gyro data (probably)</string>
+    <string name="hello_square">Watchcasting is running and sending gyro data (probably)</string>
+
+</resources>
