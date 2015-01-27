@@ -59,4 +59,8 @@ io.sockets.on('connection', function (socket) {
 //    console.log("tapmove: ", data);
   });
 
+  socket.on('record', function(data) {
+    gyroLog = fs.createWriteStream( '' + Date() + 'gyroLog.txt');
+  });
+
 });

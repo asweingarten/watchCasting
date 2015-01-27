@@ -17,46 +17,7 @@ public class ListedToWearableService extends WearableListenerService {
     private IOSocket socket;
     @Override
     public void onCreate() {
-
-        socket = new IOSocket("http://10.0.1.12:3000", new MessageCallback() {
-
-            @Override
-            public void onMessage(String message) {
-                // Handle simple messages
-            }
-
-            @Override
-            public void onConnect() {
-                // Socket connection opened
-                System.out.println("Connection to server established");
-                Log.i("onConnect", "Connected to server established");
-
-            }
-
-            @Override
-            public void onDisconnect() {
-                // Socket connection closed
-            }
-
-            @Override
-            public void on(String event, JSONObject... data) {
-                // TODO Auto-generated method stub
-
-            }
-
-            @Override
-            public void onMessage(JSONObject json) {
-                // TODO Auto-generated method stub
-
-            }
-
-            @Override
-            public void onConnectFailure() {
-                Log.e("socketio", "connection failed");
-                // TODO Auto-generated method stub
-
-            }
-        });
+          socket = Communication.socket;
 
         socket.connect();
 

@@ -6,6 +6,11 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.Button;
+import android.widget.TextView;
+
+import org.json.JSONObject;
 
 
 public class MainActivity extends ActionBarActivity {
@@ -21,6 +26,24 @@ public class MainActivity extends ActionBarActivity {
         //i.putExtra("KEY1", "Value to be used by the service");
         this.startService(i);
         Log.i("MainActivityPhone", "Intent started");
+        Button button = (Button)findViewById(R.id.recordBtn);
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                TextView info = (TextView)findViewById(R.id.info);
+                info.setText("Button Pressed");
+                try {
+                    JSONObject jo = new JSONObject();
+                    jo.put("firstName", "John");
+                    jo.put("lastName", "Doe");
+                    if (Communication.socket.isConnected()) {
+                        Communication.socket.emit("record", jo);
+                    }
+                } catch (Exception e) {
+                    Log.e("record", "Error emitting record message");
+                }
+            }
+        });
     }
 
     @Override
