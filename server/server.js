@@ -2,7 +2,7 @@ var app = require('http').createServer(handler)
   , io = require('socket.io').listen(app)
   , fs = require('fs')
   , port = 3000
-  , gyroLog = fs.createWriteStream( '' + Date() + 'gyroLog.txt');
+  , gyroLog = fs.createWriteStream( '' + Date.now() + 'gyroLog.txt');
 
 app.listen(port, function() {
   console.log('Server listening on: ' + app.address().address + ':' + app.address().port);
@@ -60,7 +60,7 @@ io.sockets.on('connection', function (socket) {
   });
 
   socket.on('record', function(data) {
-    gyroLog = fs.createWriteStream( '' + Date() + 'gyroLog.txt');
+    gyroLog = fs.createWriteStream( '' + Date.now() + 'gyroLog.txt');
   });
 
 });
