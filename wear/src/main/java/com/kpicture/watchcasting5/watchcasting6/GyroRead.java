@@ -8,6 +8,7 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.Message;
 import android.util.Log;
 import android.widget.TextView;
 
@@ -21,9 +22,16 @@ import com.google.android.gms.wearable.Wearable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.sql.CommonDataSource;
+
 public class GyroRead extends Service implements SensorEventListener, GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener {
 
+    private ConcurrentBuffer messageBufferSystem = new ConcurrentBuffer();
+    private Node phone;
     private TextView mTextView;
     private Sensor accelerometer;
     private Sensor magnetometer;
@@ -37,6 +45,7 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
     private float DEG = 57.2957795f;
     private final String TAG = "GYRO::";
     private GoogleApiClient mGoogleApiClient;
+    List<JSONObject> messageBuffer = new ArrayList<JSONObject>();
     JSONObject message, oldmessage;
     NodeApi.GetConnectedNodesResult nodes;
     float[] gData = new float[3];           // Gravity or accelerometer
@@ -75,7 +84,6 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-
         return Service.START_NOT_STICKY;
     }
 
@@ -93,30 +101,31 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
        new Thread(new Runnable() {
             @Override
             public void run() {
+            NodeApi.GetConnectedNodesResult nodes = Wearable.NodeApi.getConnectedNodes(mGoogleApiClient).await();
+            phone = nodes.getNodes().get(0);
+//                NodeApi.GetConnectedNodesResult nodes = Wearable.NodeApi.getConnectedNodes(mGoogleApiClient).await();
 
-                NodeApi.GetConnectedNodesResult nodes = Wearable.NodeApi.getConnectedNodes(mGoogleApiClient).await();
+            while (true) {
+                try {
+//                        oldmessage = message;
+                    List<JSONObject> messages = messageBufferSystem.getMessages();
+                    for (JSONObject m : messages) {
+                        MessageApi.SendMessageResult result = Wearable.MessageApi.sendMessage(mGoogleApiClient, phone.getId(), "", m.toString().getBytes()).await();
 
-                while (true) {
-                    try {
-                       // if (!(oldmessage.getString("alpha").equals(message.getString("alpha")))) {
-
-                           oldmessage = message;
-
-                           for (Node node : nodes.getNodes()) {
-
-                                MessageApi.SendMessageResult result = Wearable.MessageApi.sendMessage(mGoogleApiClient, node.getId(), "", message.toString().getBytes()).await();
-
-                                if (!result.getStatus().isSuccess()) {
-                                    Log.e("MessageToSmartcastingApp", "Message sending error");
-                                } else {
-                                   // Log.e("MessageToSmartcastingApp", "Message sent successfully to: " + node.getDisplayName());
-                                }
-                            }
-                       // }
-                    } catch (Exception e) {
-                        e.printStackTrace();
+//                            if (!result.getStatus().isSuccess()) {
+//                                Log.e("MessageToSmartcastingApp", "Message sending error");
+//                            } else {
+//
+//                                // Log.e("MessageToSmartcastingApp", "Message sent successfully to: " + node.getDisplayName());
+//                            }
                     }
+
+
+                   // }
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
+            }
             }
         }).start();
     }
@@ -133,109 +142,79 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-      //  Log.e("WearableSensor", "Sensor read!");
 
-/*        float[] lastRotVal = new float[3];
-        float[] rotation = new float[9];
-        float[] orientation = new float[3];
-
-        try{
-            System.arraycopy(event.values, 0, lastRotVal, 0, event.values.length);
-        } catch (IllegalArgumentException e) {
-            //Hardcode the size to handle a bug on Samsung devices running Android 4.3
-            System.arraycopy(event.values, 0, lastRotVal, 0, 3);
-        }
-
-        SensorManager.getRotationMatrixFromVector(rotation, lastRotVal);
-        SensorManager.getOrientation(rotation, orientation);
-*/
-/*        if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER)
-            mGravity = event.values;
-        if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD)
-            mGeomagnetic = event.values;
-        if (mGravity != null && mGeomagnetic != null) {
-            float R[] = new float[9];
-            float I[] = new float[9];
-            oldmessage=message;
-            boolean success = SensorManager.getRotationMatrix(R, I, mGravity, mGeomagnetic);
-            if (success) {
-                orientation = new float[3];
-                SensorManager.getOrientation(R, orientation);
-                if (orientation[0] != Float.NaN && orientation[1] != Float.NaN && orientation[2] != Float.NaN) {
-                    try {
-                        message.put("alpha", -57.2957795*orientation[0]);
-                        message.put("gamma", -57.2957795*orientation[1]);
-                        message.put("beta", (-57.2957795*orientation[2]));
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-        */
-
+       JSONObject sensorMessage = new JSONObject();
        try {
-            if (event.sensor.getType() == Sensor.TYPE_ORIENTATION) {
-                message.put("alpha", -(event.values[0]+180));
-                message.put("gamma", event.values[1]);
-                message.put("beta", event.values[2]+30);
-                //Log.e("WearableSensor", "Sensor read!: "+ event.values[0] +", "+event.values[1]+", "+event.values[2]);
-            }
+           switch( event.sensor.getType() ) {
+               case Sensor.TYPE_GRAVITY:
+                   sensorMessage.put("gravityX", event.values[0]);
+                   sensorMessage.put("gravityY",event.values[1]);
+                   sensorMessage.put("gravityZ",event.values[2]);
+                   break;
+               case Sensor.TYPE_ACCELEROMETER:
+                   if (haveGrav) break;    // don't need it, we have better
+                   sensorMessage.put("accX",event.values[0]);
+                   sensorMessage.put("accY",event.values[1]);
+                   sensorMessage.put("accZ",event.values[2]);
+                   break;
+               case Sensor.TYPE_MAGNETIC_FIELD:
+                   sensorMessage.put("magnetX",event.values[0]);
+                   sensorMessage.put("magnetY",event.values[1]);
+                   sensorMessage.put("magnetZ",event.values[2]);
+                   break;
+               case Sensor.TYPE_GYROSCOPE:
+                   sensorMessage.put("gyroscopeX",event.values[0]);
+                   sensorMessage.put("gyroscopeY",event.values[1]);
+                   sensorMessage.put("gyroscopeZ",event.values[2]);
+                   break;
+               case Sensor.TYPE_ORIENTATION:
+                   sensorMessage.put("alpha", -(event.values[0]+180));
+                   sensorMessage.put("gamma", event.values[1]);
+                   sensorMessage.put("beta", event.values[2]+30);
+               default:
+                break;
+           }
+           sensorMessage.put("timestamp", event.timestamp);
+            messageBufferSystem.addMessage(sensorMessage);
+//           messageBuffer.add(sensorMessage);
+//           message = sensorMessage;
         } catch (JSONException e) {
             e.printStackTrace();
         }
-/*
-        float[] data;
-        switch( event.sensor.getType() ) {
-            case Sensor.TYPE_GRAVITY:
-                gData[0] = event.values[0];
-                gData[1] = event.values[1];
-                gData[2] = event.values[2];
-                haveGrav = true;
-                break;
-            case Sensor.TYPE_ACCELEROMETER:
-                if (haveGrav) break;    // don't need it, we have better
-                gData[0] = event.values[0];
-                gData[1] = event.values[1];
-                gData[2] = event.values[2];
-                haveAccel = true;
-                break;
-            case Sensor.TYPE_MAGNETIC_FIELD:
-                mData[0] = event.values[0];
-                mData[1] = event.values[1];
-                mData[2] = event.values[2];
-                haveMag = true;
-                break;
-            default:
-                return;
-        }
 
-        if ((haveGrav || haveAccel) && haveMag) {
-            SensorManager.getRotationMatrix(Rmat, Imat, gData, mData);
-            SensorManager.remapCoordinateSystem(Rmat,
-                    SensorManager.AXIS_Y, SensorManager.AXIS_MINUS_X, R2);
-            // Orientation isn't as useful as a rotation matrix, but
-            // we'll show it here anyway.
-            SensorManager.getOrientation(R2, orientation);
-            float incl = SensorManager.getInclination(Imat);
-           // Log.d(TAG, "mh: " + (int)(orientation[0]*DEG));
-            try {
-                message.put("beta", -(int)(orientation[1]*DEG));
-                message.put("gamma",  -(int)(orientation[2]*DEG));
-                message.put("alpha", -(int)(orientation[0]*DEG));
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            //Log.d(TAG, "pitch: " + (int)(orientation[1]*DEG));
-            //Log.d(TAG, "roll: " + (int)(orientation[2]*DEG));
-            //Log.d(TAG, "yaw: " + (int)(orientation[0]*DEG));
-           // Log.d(TAG, "inclination: " + (int)(incl*DEG));
-        }*/
     }
 
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
         Log.e("WearableSensor", "Accuracy of sensor changed");
+    }
+
+
+    private class ConcurrentBuffer {
+        public List<JSONObject> messageBufferOne = new ArrayList<JSONObject>();
+        public List<JSONObject> messageBufferTwo = new ArrayList<JSONObject>();
+        private List<JSONObject> writeMessageBuffer = messageBufferOne;
+        private boolean onMessageBufferOne = true;
+
+        synchronized public void addMessage(JSONObject message) {
+            writeMessageBuffer.add(message);
+        }
+
+        synchronized public List<JSONObject> getMessages() {
+            return swapBuffers();
+        }
+
+        synchronized private List<JSONObject> swapBuffers() {
+            if (onMessageBufferOne) {
+                messageBufferTwo.clear();
+                writeMessageBuffer = messageBufferTwo;
+                return messageBufferOne;
+            } else {
+                messageBufferOne.clear();
+                writeMessageBuffer = messageBufferOne;
+                return messageBufferTwo;
+            }
+        }
     }
 }

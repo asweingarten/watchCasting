@@ -4,8 +4,11 @@ import android.util.Log;
 
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class Communication {
-    public static IOSocket socket = new IOSocket("http://192.168.43.96:3000", new MessageCallback() {
+    public static IOSocket socket = new IOSocket("http://10.0.1.12:3000", new MessageCallback() {
 
         @Override
         public void onMessage(String message) {

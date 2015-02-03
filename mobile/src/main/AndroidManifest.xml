@@ -20,7 +20,7 @@
         </activity>
 
         <service
-            android:name="com.kpicture.watchcasting5.watchcasting6.ListedToWearableService"
+            android:name=".ListenToWearableService"
             android:enabled="true"
             android:exported="true" >
         </service>

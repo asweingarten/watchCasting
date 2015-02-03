@@ -10,9 +10,10 @@ import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
-public class ListedToWearableService extends WearableListenerService {
+public class ListenToWearableService extends WearableListenerService {
 
     private IOSocket socket;
     @Override
@@ -51,15 +52,13 @@ public class ListedToWearableService extends WearableListenerService {
         Wearable.MessageApi.addListener(mGoogleApiClient, new MessageApi.MessageListener() {
             @Override
             public void onMessageReceived(MessageEvent messageEvent) {
-                //Log.e("FINALLY!!!!", "Message received: ");
                 try {
                     JSONObject message = new JSONObject(new String(messageEvent.getData()));
-
                     if (socket.isConnected()) {
                         socket.emit("gyro", message);
                         Log.d("server", "SENT MESSAGE TO SERVER");
                     }
-                    Log.d("FINALLY::", ",alpha="+(String) message.getString("alpha") + ",beta="+ (String) message.getString("beta") + ",gamma="+(String) message.getString("gamma"));
+//                    Log.d("FINALLY::", ",alpha="+(String) message.getString("alpha") + ",beta="+ (String) message.getString("beta") + ",gamma="+(String) message.getString("gamma"));
                 } catch (Exception e) {
                     e.printStackTrace();
                 }

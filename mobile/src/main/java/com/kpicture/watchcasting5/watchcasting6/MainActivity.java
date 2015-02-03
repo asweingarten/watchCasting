@@ -19,7 +19,7 @@ public class MainActivity extends ActionBarActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        Intent i = new Intent(this, ListedToWearableService.class);
+        Intent i = new Intent(this, ListenToWearableService.class);
         Log.i("MainActivityPhone", "Indent created");
 
         // potentially add data to the intent
@@ -34,8 +34,6 @@ public class MainActivity extends ActionBarActivity {
                 info.setText("Button Pressed");
                 try {
                     JSONObject jo = new JSONObject();
-                    jo.put("firstName", "John");
-                    jo.put("lastName", "Doe");
                     if (Communication.socket.isConnected()) {
                         Communication.socket.emit("record", jo);
                     }
