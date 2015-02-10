@@ -22,6 +22,8 @@ function handler (req, res) {
   });
 }
 
+io.set('log level', 0);
+
 io.sockets.on('connection', function (socket) {
   socket.emit('news', { hello: 'world' });
   console.log('connected');
@@ -36,7 +38,7 @@ io.sockets.on('connection', function (socket) {
     socket.broadcast.emit('gyro', data);
     gyroLog.write(JSON.stringify(data));
     gyroLog.write('\n');
-    console.log("gyro: ", data);
+    // console.log("gyro: ", data);
   });
 
   socket.on('select', function (data) {
