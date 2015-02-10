@@ -203,20 +203,20 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
 
         private boolean onBuffer1 = true;
 
-        public void writeMessage(JSONObject message) {
+        public synchronized void writeMessage(JSONObject message) {
             writeBuffer.add(writeCount, message);
             writeCount++;
         }
 
-        public List<JSONObject> readMessages() {
+        public synchronized List<JSONObject> readMessages() {
             return swapBuffers();
         }
 
-        public int getNumMessagesToRead() {
+        public synchronized int getNumMessagesToRead() {
             return readCount;
         }
 
-        private List<JSONObject> swapBuffers() {
+        private synchronized List<JSONObject> swapBuffers() {
             onBuffer1 = !onBuffer1;
             readCount = writeCount;
             writeCount = 0;
