@@ -21,9 +21,13 @@ import com.google.android.gms.wearable.Wearable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class GyroRead extends Service implements SensorEventListener, GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener {
 
+    private ConcurrentBuffer concurrentBuffer = new ConcurrentBuffer();
     private Node phone;
     private Sensor accelerometer;
     private Sensor magnetometer;
@@ -80,6 +84,40 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
     @Override
     public void onConnected(Bundle bundle) {
        Log.e("MessageToSmartcastingApp", "Succesfully connected to SmartcastingApp1");
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                NodeApi.GetConnectedNodesResult nodes = Wearable.NodeApi.getConnectedNodes(mGoogleApiClient).await();
+                phone = nodes.getNodes().get(0);
+
+                while (true) {
+                    try {
+                        List<JSONObject> messages = concurrentBuffer.readMessages();
+                        int numMessages = concurrentBuffer.getNumMessagesToRead();
+                        for (int i  = 0; i < numMessages; i++) {
+                            Wearable.MessageApi.sendMessage(mGoogleApiClient, phone.getId(), "", messages.get(i).toString().getBytes()).setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
+                                @Override
+                                public void onResult(MessageApi.SendMessageResult sendMessageResult) {
+
+                                }
+                            });
+//                            if (!result.getStatus().isSuccess()) {
+//                                Log.e("MessageToSmartcastingApp", "Message sending error");
+//                            } else {
+//
+//                                // Log.e("MessageToSmartcastingApp", "Message sent successfully to: " + node.getDisplayName());
+//                            }
+                        }
+
+
+                        // }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }).start();
     }
 
     @Override
@@ -133,13 +171,14 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
                 break;
            }
            sensorMessage.put("timestamp", event.timestamp);
-           if (phone != null) {
-               Wearable.MessageApi.sendMessage(mGoogleApiClient, phone.getId(), "", sensorMessage.toString().getBytes()).setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
-                   @Override
-                   public void onResult(MessageApi.SendMessageResult sendMessageResult) {
-                   }
-               });
-           }
+           concurrentBuffer.writeMessage(sensorMessage);
+//           if (phone != null) {
+//               Wearable.MessageApi.sendMessage(mGoogleApiClient, phone.getId(), "", sensorMessage.toString().getBytes()).setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
+//                   @Override
+//                   public void onResult(MessageApi.SendMessageResult sendMessageResult) {
+//                   }
+//               });
+//           }
 
         } catch (JSONException e) {
             e.printStackTrace();
@@ -151,5 +190,46 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
         Log.e("WearableSensor", "Accuracy of sensor changed");
+    }
+
+    private class ConcurrentBuffer {
+        private ArrayList<JSONObject> buffer1 = new ArrayList<JSONObject>();
+        private ArrayList<JSONObject> buffer2 = new ArrayList<JSONObject>();
+
+        private int readCount = 0;
+        private int writeCount = 0;
+        private ArrayList<JSONObject> writeBuffer = buffer1;
+        private ArrayList<JSONObject> readBuffer = buffer2;
+
+        private boolean onBuffer1 = true;
+
+        public void writeMessage(JSONObject message) {
+            writeBuffer.add(writeCount, message);
+            writeCount++;
+        }
+
+        public List<JSONObject> readMessages() {
+            return swapBuffers();
+        }
+
+        public int getNumMessagesToRead() {
+            return readCount;
+        }
+
+        private List<JSONObject> swapBuffers() {
+            onBuffer1 = !onBuffer1;
+            readCount = writeCount;
+            writeCount = 0;
+
+            if (onBuffer1) {
+                readBuffer = buffer1;
+                writeBuffer = buffer2;
+            } else {
+                readBuffer = buffer2;
+                writeBuffer = buffer1;
+            }
+            return readBuffer;
+        }
+
     }
 }
