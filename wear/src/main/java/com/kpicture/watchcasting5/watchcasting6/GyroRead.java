@@ -9,48 +9,48 @@ import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
-
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.wearable.MessageApi;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.NodeApi;
 import com.google.android.gms.wearable.Wearable;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.util.ArrayList;
-import java.util.List;
+import java.nio.ByteBuffer;
 
 public class GyroRead extends Service implements SensorEventListener, GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener {
 
-    private ConcurrentBuffer concurrentBuffer = new ConcurrentBuffer();
-    private Node phone;
+    private final int BUFFER_SIZE = 1000;
+    private float[][] babs = new float[BUFFER_SIZE][5];
+    private int start_row = 0;
+    private int end_row = 0;
     private Sensor accelerometer;
     private Sensor magnetometer;
     private Sensor gyroscope;
-    private Sensor orientationS;
+    private Sensor orientation;
     private SensorManager sensorManager;
-    private float DEG = 57.2957795f;
-    private final String TAG = "GYRO::";
     private GoogleApiClient mGoogleApiClient;
-    boolean haveGrav = false;
 
     @Override
     public void onCreate() {
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
         gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
-        orientationS = sensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION);
+        orientation = sensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION);
         sensorManager.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_FASTEST);
         sensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_FASTEST);
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_FASTEST);
-        sensorManager.registerListener(this, orientationS,SensorManager.SENSOR_DELAY_FASTEST);
-
+        sensorManager.registerListener(this, orientation,SensorManager.SENSOR_DELAY_FASTEST);
+        for (int i = 0; i < BUFFER_SIZE; i++){
+            babs[i] = new float[5];
+            babs[i][0] = 0;
+            babs[i][1] = 0;
+            babs[i][2] = 0;
+            babs[i][3] = 0;
+            babs[i][4] = 0;
+        }
         // connect to Companion app
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addApi(Wearable.API)
@@ -59,18 +59,11 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
                 .build();
         mGoogleApiClient.connect();
 
-        Wearable.NodeApi.getConnectedNodes(mGoogleApiClient).setResultCallback(new ResultCallback<NodeApi.GetConnectedNodesResult>() {
-            @Override
-            public void onResult(NodeApi.GetConnectedNodesResult getConnectedNodesResult) {
-                phone = getConnectedNodesResult.getNodes().get(0);
-
-            }
-        });
-
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+
         return Service.START_NOT_STICKY;
     }
 
@@ -83,38 +76,59 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
 
     @Override
     public void onConnected(Bundle bundle) {
-       Log.e("MessageToSmartcastingApp", "Succesfully connected to SmartcastingApp1");
+       Log.e("MsgToSmartcastingApp", "Succesfully connected to SmartcastingApp1");
 
-        new Thread(new Runnable() {
+       new Thread(new Runnable() {
             @Override
             public void run() {
+
                 NodeApi.GetConnectedNodesResult nodes = Wearable.NodeApi.getConnectedNodes(mGoogleApiClient).await();
-                phone = nodes.getNodes().get(0);
 
                 while (true) {
-                    try {
-                        List<JSONObject> messages = concurrentBuffer.readMessages();
-                        int numMessages = concurrentBuffer.getNumMessagesToRead();
-                        for (int i  = 0; i < numMessages; i++) {
-                            Wearable.MessageApi.sendMessage(mGoogleApiClient, phone.getId(), "", messages.get(i).toString().getBytes()).setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
-                                @Override
-                                public void onResult(MessageApi.SendMessageResult sendMessageResult) {
 
-                                }
-                            });
-//                            if (!result.getStatus().isSuccess()) {
-//                                Log.e("MessageToSmartcastingApp", "Message sending error");
-//                            } else {
-//
-//                                // Log.e("MessageToSmartcastingApp", "Message sent successfully to: " + node.getDisplayName());
-//                            }
+                    try {
+
+                        Thread.sleep(500,0);
+                        int current_end_row;
+
+                        if (end_row < start_row) {
+                            current_end_row = BUFFER_SIZE+end_row;
+                        } else {
+                            current_end_row = end_row;
                         }
 
+                        int SIZE_OF_BYTE_BUFFER = (current_end_row-start_row+1)*20;
+                        byte[] bytebuffer = new byte[SIZE_OF_BYTE_BUFFER];
+                        Log.e("SIZE", new Integer(SIZE_OF_BYTE_BUFFER).toString());
 
-                        // }
+                        for (int i = 0; i < current_end_row-start_row; i++) {
+                            for (int j = 0; j < 5; j++) {
+                                int bits = Float.floatToIntBits(babs[(start_row+i)% BUFFER_SIZE][j]);
+                                bytebuffer[i*4*5+j*4+0] = (byte)(bits & 0xff);
+                                bytebuffer[i*4*5+j*4+1] = (byte)((bits >> 8) & 0xff);
+                                bytebuffer[i*4*5+j*4+2] = (byte)((bits >> 16) & 0xff);
+                                bytebuffer[i*4*5+j*4+3] = (byte)((bits >> 24) & 0xff);
+                            }
+                        }
+                         for (Node node : nodes.getNodes()) {
+
+                            MessageApi.SendMessageResult result = Wearable.MessageApi.sendMessage(mGoogleApiClient, node.getId(), "",bytebuffer).await();
+
+                            if (!result.getStatus().isSuccess()) {
+                                Log.e("MsgToSmartcastingApp", "Message sending error");
+                            } else {
+                                Log.e("MsgToSmartcastingApp", "Message sent successfully to: " + node.getDisplayName());
+                            }
+
+                        }
+
+                        // set new start (for next readout);
+                        start_row = current_end_row % BUFFER_SIZE;
+
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
+
                 }
             }
         }).start();
@@ -122,67 +136,49 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
 
     @Override
     public void onConnectionSuspended(int i) {
-        Log.e("MessageToSmartcastingApp", "Connection suspended");
+        Log.e("MsgToSmartcastingApp", "Connection suspended");
     }
 
     @Override
     public void onConnectionFailed(ConnectionResult connectionResult) {
-        Log.e("MessageToSmartcastingApp", "Connection Failed");
+        Log.e("MsgToSmartcastingApp", "Connection Failed");
     }
 
     @Override
     public void onSensorChanged(SensorEvent event) {
 
-       final JSONObject sensorMessage = new JSONObject();
-       try {
-           switch( event.sensor.getType() ) {
-               case Sensor.TYPE_GRAVITY:
-                   sensorMessage.put("gravityX", event.values[0]);
-                   sensorMessage.put("gravityY",event.values[1]);
-                   sensorMessage.put("gravityZ",event.values[2]);
-                   break;
-               case Sensor.TYPE_ACCELEROMETER:
-                   if (haveGrav) break;
-                   sensorMessage.put("accX",event.values[0]);
-                   sensorMessage.put("accY",event.values[1]);
-                   sensorMessage.put("accZ",event.values[2]);
-                   break;
-               case Sensor.TYPE_LINEAR_ACCELERATION:
-                   if (haveGrav) break;    // don't need it, we have better
-                   sensorMessage.put("accX",event.values[0]);
-                   sensorMessage.put("accY",event.values[1]);
-                   sensorMessage.put("accZ",event.values[2]);
-                   break;
-               case Sensor.TYPE_MAGNETIC_FIELD:
-                   sensorMessage.put("magnetX",event.values[0]);
-                   sensorMessage.put("magnetY",event.values[1]);
-                   sensorMessage.put("magnetZ",event.values[2]);
-                   break;
-               case Sensor.TYPE_GYROSCOPE:
-                   sensorMessage.put("gyroscopeX",event.values[0]);
-                   sensorMessage.put("gyroscopeY",event.values[1]);
-                   sensorMessage.put("gyroscopeZ",event.values[2]);
-                   break;
-               case Sensor.TYPE_ORIENTATION:
-                   sensorMessage.put("alpha", -(event.values[0]+180));
-                   sensorMessage.put("gamma", event.values[1]);
-                   sensorMessage.put("beta", event.values[2]+30);
-               default:
+        switch( event.sensor.getType() ) {
+            case Sensor.TYPE_GRAVITY:
+                babs[end_row][0] = 1;
+                babs[end_row][1] = event.values[0];
+                babs[end_row][2] = event.values[1];
+                babs[end_row][3] = event.values[2];
+                babs[end_row][4] = (float) event.timestamp;
                 break;
-           }
-           sensorMessage.put("timestamp", event.timestamp);
-           concurrentBuffer.writeMessage(sensorMessage);
-//           if (phone != null) {
-//               Wearable.MessageApi.sendMessage(mGoogleApiClient, phone.getId(), "", sensorMessage.toString().getBytes()).setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
-//                   @Override
-//                   public void onResult(MessageApi.SendMessageResult sendMessageResult) {
-//                   }
-//               });
-//           }
-
-        } catch (JSONException e) {
-            e.printStackTrace();
+            case Sensor.TYPE_ACCELEROMETER:
+                babs[end_row][0] = 2;
+                babs[end_row][1] = event.values[0];
+                babs[end_row][2] = event.values[1];
+                babs[end_row][3] = event.values[2];
+                babs[end_row][4] = (float) event.timestamp;
+                break;
+            case Sensor.TYPE_MAGNETIC_FIELD:
+                babs[end_row][0] = 3;
+                babs[end_row][1] = event.values[0];
+                babs[end_row][2] = event.values[1];
+                babs[end_row][3] = event.values[2];
+                babs[end_row][4] = (float) event.timestamp;
+                break;
+            case Sensor.TYPE_ORIENTATION:
+                babs[end_row][0] = 4;
+                babs[end_row][1] = event.values[0];
+                babs[end_row][2] = event.values[1];
+                babs[end_row][3] = event.values[2];
+                babs[end_row][4] = (float) event.timestamp;
+            default:
+                return;
         }
+        end_row = (end_row + 1) % BUFFER_SIZE;
 
     }
 
@@ -190,46 +186,5 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
         Log.e("WearableSensor", "Accuracy of sensor changed");
-    }
-
-    private class ConcurrentBuffer {
-        private ArrayList<JSONObject> buffer1 = new ArrayList<JSONObject>();
-        private ArrayList<JSONObject> buffer2 = new ArrayList<JSONObject>();
-
-        private int readCount = 0;
-        private int writeCount = 0;
-        private ArrayList<JSONObject> writeBuffer = buffer1;
-        private ArrayList<JSONObject> readBuffer = buffer2;
-
-        private boolean onBuffer1 = true;
-
-        public synchronized void writeMessage(JSONObject message) {
-            writeBuffer.add(writeCount, message);
-            writeCount++;
-        }
-
-        public synchronized List<JSONObject> readMessages() {
-            return swapBuffers();
-        }
-
-        public synchronized int getNumMessagesToRead() {
-            return readCount;
-        }
-
-        private synchronized List<JSONObject> swapBuffers() {
-            onBuffer1 = !onBuffer1;
-            readCount = writeCount;
-            writeCount = 0;
-
-            if (onBuffer1) {
-                readBuffer = buffer1;
-                writeBuffer = buffer2;
-            } else {
-                readBuffer = buffer2;
-                writeBuffer = buffer1;
-            }
-            return readBuffer;
-        }
-
     }
 }
