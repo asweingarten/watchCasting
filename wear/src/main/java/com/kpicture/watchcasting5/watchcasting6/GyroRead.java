@@ -35,7 +35,8 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
     @Override
     public void onCreate() {
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+//        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
         magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
         gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
         orientation = sensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION);
@@ -98,16 +99,21 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
                         }
 
                         int SIZE_OF_BYTE_BUFFER = (current_end_row-start_row+1)*20;
+                        ByteBuffer bb;
                         byte[] bytebuffer = new byte[SIZE_OF_BYTE_BUFFER];
                         Log.e("SIZE", new Integer(SIZE_OF_BYTE_BUFFER).toString());
 
                         for (int i = 0; i < current_end_row-start_row; i++) {
                             for (int j = 0; j < 5; j++) {
                                 int bits = Float.floatToIntBits(babs[(start_row+i)% BUFFER_SIZE][j]);
-                                bytebuffer[i*4*5+j*4+0] = (byte)(bits & 0xff);
-                                bytebuffer[i*4*5+j*4+1] = (byte)((bits >> 8) & 0xff);
-                                bytebuffer[i*4*5+j*4+2] = (byte)((bits >> 16) & 0xff);
-                                bytebuffer[i*4*5+j*4+3] = (byte)((bits >> 24) & 0xff);
+                                bb = ByteBuffer.allocate(4);
+                                bb.putInt(bits);
+
+                                bytebuffer[i*4*5+j*4+0] = bb.get(0);
+                                bytebuffer[i*4*5+j*4+1] = bb.get(1);
+                                bytebuffer[i*4*5+j*4+2] = bb.get(2);
+                                bytebuffer[i*4*5+j*4+3] = bb.get(3);
+
                             }
                         }
                          for (Node node : nodes.getNodes()) {
@@ -155,7 +161,7 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
                 babs[end_row][3] = event.values[2];
                 babs[end_row][4] = (float) event.timestamp;
                 break;
-            case Sensor.TYPE_ACCELEROMETER:
+            case Sensor.TYPE_LINEAR_ACCELERATION:
                 babs[end_row][0] = 2;
                 babs[end_row][1] = event.values[0];
                 babs[end_row][2] = event.values[1];

@@ -13,6 +13,8 @@ import com.google.android.gms.wearable.WearableListenerService;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.nio.ByteBuffer;
+
 public class ListenToWearableService extends WearableListenerService {
 
     private IOSocket socket;
@@ -53,20 +55,77 @@ public class ListenToWearableService extends WearableListenerService {
             @Override
             public void onMessageReceived(MessageEvent messageEvent) {
                 try {
-                    JSONObject message = new JSONObject(new String(messageEvent.getData()));
+//                    JSONObject message = new JSONObject(new String(messageEvent.getData()));
+                    byte[] inboundMessage = messageEvent.getData();
+                    float sensorType = 0;
+                    float sensorVal1 = -999;
+                    float sensorVal2 = -999;
+                    float sensorVal3 = -999;
+                    float timestamp  = -999;
+                    for(int i = 0; i < inboundMessage.length; i+=20) {
+                        sensorType = floatFromBytes(inboundMessage, i);
+                        sensorVal1 = floatFromBytes(inboundMessage, i+4);
+                        sensorVal2 = floatFromBytes(inboundMessage, i+8);
+                        sensorVal3 = floatFromBytes(inboundMessage, i+12);
+                        timestamp  = floatFromBytes(inboundMessage, i+16);
+
+                        JSONObject outboundMessage = new JSONObject();
+                        outboundMessage.put("sensor", sensorNameFromId(Math.round(sensorType)));
+                        outboundMessage.put("x", sensorVal1);
+                        outboundMessage.put("y", sensorVal2);
+                        outboundMessage.put("z", sensorVal3);
+                        outboundMessage.put("timestamp", timestamp);
+                        if (socket.isConnected())
+                            socket.emit("gyro", outboundMessage);
+                    }
+
+
+                    // @TODO: put in delimeter
+
                     if (socket.isConnected()) {
-                        socket.emit("gyro", message);
+//                        socket.emit("gyro", message);
                         Log.d("server", "SENT MESSAGE TO SERVER");
                     }
-//                    Log.d("FINALLY::", ",alpha="+(String) message.getString("alpha") + ",beta="+ (String) message.getString("beta") + ",gamma="+(String) message.getString("gamma"));
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
         });
 
-
     }
+
+    private float floatFromBytes(byte[] sourceArray, int start) {
+        int intBits;
+        byte[] tempArray = new byte[4];
+        ByteBuffer bb;
+
+        for (int i = 0; i < 4; i++) {
+            tempArray[i] = sourceArray[start+i];
+        }
+
+        bb = ByteBuffer.wrap(tempArray);
+
+        intBits = bb.getInt();
+        return Float.intBitsToFloat(intBits);
+    }
+
+    private String sensorNameFromId(int sensorId) {
+        Log.d("sensorID", ""+sensorId);
+        switch(sensorId) {
+            case 1:
+                return "GRAVITY";
+            case 2:
+                return "ACCELEROMETER";
+            case 3:
+                return "MAGNETOMETER";
+            case 4:
+                return "GYRO";
+            default:
+                return "BAD ID";
+        }
+    }
+
+
 
 
 }
