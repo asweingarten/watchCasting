@@ -12,6 +12,7 @@ import android.util.Log;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.wearable.MessageApi;
+import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.NodeApi;
 import com.google.android.gms.wearable.Wearable;
@@ -31,6 +32,8 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
     private Sensor orientation;
     private SensorManager sensorManager;
     private GoogleApiClient mGoogleApiClient;
+    private boolean sendData = false;
+
 
     @Override
     public void onCreate() {
@@ -59,6 +62,13 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
                 .addOnConnectionFailedListener(this)
                 .build();
         mGoogleApiClient.connect();
+
+        Wearable.MessageApi.addListener(mGoogleApiClient, new MessageApi.MessageListener() {
+            @Override
+            public void onMessageReceived(MessageEvent messageEvent) {
+                sendData = !sendData;
+            }
+        });
 
     }
 
@@ -89,7 +99,8 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
 
                     try {
 
-                        Thread.sleep(500,0);
+                        if (!sendData) continue;
+
                         int current_end_row;
 
                         if (end_row < start_row) {
@@ -152,6 +163,8 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
 
     @Override
     public void onSensorChanged(SensorEvent event) {
+
+        if (!sendData) return;
 
         switch( event.sensor.getType() ) {
             case Sensor.TYPE_GRAVITY:
