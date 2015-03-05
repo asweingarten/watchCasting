@@ -19,12 +19,13 @@ public class MainActivity extends ActionBarActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        Intent i = new Intent(this, ListenToWearableService.class);
+        Intent listenToWearable = new Intent(this, ListenToWearableService.class);
+
         Log.i("MainActivityPhone", "Indent created");
 
         // potentially add data to the intent
         //i.putExtra("KEY1", "Value to be used by the service");
-        this.startService(i);
+        this.startService(listenToWearable);
         Log.i("MainActivityPhone", "Intent started");
         Button button = (Button)findViewById(R.id.recordBtn);
         button.setOnClickListener(new View.OnClickListener() {

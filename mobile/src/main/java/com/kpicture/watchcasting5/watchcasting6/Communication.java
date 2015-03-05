@@ -8,7 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Communication {
-    public static IOSocket socket = new IOSocket("http://10.0.1.12:3000", new MessageCallback() {
+    public static Boolean delimeterDetected = false;
+    public static IOSocket socket = new IOSocket("http://10.0.1.19:3000", new MessageCallback() {
 
         @Override
         public void onMessage(String message) {

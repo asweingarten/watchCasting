@@ -1,5 +1,6 @@
 package com.kpicture.watchcasting5.watchcasting6;
 
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.util.Log;
 
@@ -7,6 +8,8 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.wearable.MessageApi;
 import com.google.android.gms.wearable.MessageEvent;
+import com.google.android.gms.wearable.Node;
+import com.google.android.gms.wearable.NodeApi;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
 
@@ -15,15 +18,20 @@ import org.json.JSONObject;
 
 import java.nio.ByteBuffer;
 
+import javax.sql.CommonDataSource;
+
 public class ListenToWearableService extends WearableListenerService {
 
     private IOSocket socket;
+    private AccelerometerListener accelListener;
+    private float lastTimestamp = 0;
+
+
     @Override
     public void onCreate() {
-          socket = Communication.socket;
-
+        socket = Communication.socket;
         socket.connect();
-
+        accelListener = new AccelerometerListener((SensorManager)getSystemService(SENSOR_SERVICE));
 
      GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
@@ -52,16 +60,24 @@ public class ListenToWearableService extends WearableListenerService {
         Log.e("PhoneConnection","Phone connected? :"+mGoogleApiClient.isConnected());
 
         Wearable.MessageApi.addListener(mGoogleApiClient, new MessageApi.MessageListener() {
+            float sensorType;
+            float sensorVal1;
+            float sensorVal2;
+            float sensorVal3;
+            float timestamp;
+            byte[] inboundMessage;
+            JSONObject outboundMessage = new JSONObject();
             @Override
             public void onMessageReceived(MessageEvent messageEvent) {
+
                 try {
 //                    JSONObject message = new JSONObject(new String(messageEvent.getData()));
-                    byte[] inboundMessage = messageEvent.getData();
-                    float sensorType = 0;
-                    float sensorVal1 = -999;
-                    float sensorVal2 = -999;
-                    float sensorVal3 = -999;
-                    float timestamp  = -999;
+                    inboundMessage = messageEvent.getData();
+                    sensorType = 0;
+                    sensorVal1 = -999;
+                    sensorVal2 = -999;
+                    sensorVal3 = -999;
+                    timestamp  = -999;
                     for(int i = 0; i < inboundMessage.length; i+=20) {
                         sensorType = floatFromBytes(inboundMessage, i);
                         sensorVal1 = floatFromBytes(inboundMessage, i+4);
@@ -69,7 +85,6 @@ public class ListenToWearableService extends WearableListenerService {
                         sensorVal3 = floatFromBytes(inboundMessage, i+12);
                         timestamp  = floatFromBytes(inboundMessage, i+16);
 
-                        JSONObject outboundMessage = new JSONObject();
                         outboundMessage.put("sensor", sensorNameFromId(Math.round(sensorType)));
                         outboundMessage.put("x", sensorVal1);
                         outboundMessage.put("y", sensorVal2);
@@ -77,6 +92,10 @@ public class ListenToWearableService extends WearableListenerService {
                         outboundMessage.put("timestamp", timestamp);
                         if (socket.isConnected())
                             socket.emit("gyro", outboundMessage);
+                        if (Communication.delimeterDetected) {
+                            Log.d("DELIMETER", "DELIMETER DETECTED");
+                            emitDelimeter(timestamp);
+                        }
                     }
 
 
@@ -110,7 +129,6 @@ public class ListenToWearableService extends WearableListenerService {
     }
 
     private String sensorNameFromId(int sensorId) {
-        Log.d("sensorID", ""+sensorId);
         switch(sensorId) {
             case 1:
                 return "GRAVITY";
@@ -123,6 +141,26 @@ public class ListenToWearableService extends WearableListenerService {
             default:
                 return "BAD ID";
         }
+    }
+
+    // @TODO: move delimeter to end of current message parsing
+    private void emitDelimeter(float timestamp) {
+        if (timestamp - lastTimestamp < 1000000000) {
+            Communication.delimeterDetected = false;
+            return;
+        }
+        lastTimestamp = timestamp;
+        Log.d("DELIMITER", "DELIMETER EMMITTED");
+        JSONObject delimeter = new JSONObject();
+        try {
+            delimeter.put("DELIMETER", timestamp);
+            socket.emit("gyro", delimeter);
+        }
+        catch (Exception e) {
+//
+        }
+        Communication.delimeterDetected = false;
+
     }
 
 
