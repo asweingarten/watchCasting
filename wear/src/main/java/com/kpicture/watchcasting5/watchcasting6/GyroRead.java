@@ -22,7 +22,7 @@ import java.nio.ByteBuffer;
 public class GyroRead extends Service implements SensorEventListener, GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener {
 
-    private final int BUFFER_SIZE = 1000;
+    private final int BUFFER_SIZE = 10000;
     private float[][] babs = new float[BUFFER_SIZE][5];
     private int start_row = 0;
     private int end_row = 0;
@@ -33,7 +33,7 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
     private SensorManager sensorManager;
     private GoogleApiClient mGoogleApiClient;
     private boolean sendData = false;
-
+    private boolean listenToPhone = true;
 
     @Override
     public void onCreate() {
@@ -66,7 +66,11 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
         Wearable.MessageApi.addListener(mGoogleApiClient, new MessageApi.MessageListener() {
             @Override
             public void onMessageReceived(MessageEvent messageEvent) {
-                sendData = !sendData;
+                Log.d("MESSAGE RECEIVED", "FROM PHONE");
+                if (messageEvent.getData().length == 1 && listenToPhone)
+                    Log.d("MESSAGE RECEIVED", "WE LISTENED");
+                    listenToPhone = false;
+                    sendData = !sendData;
             }
         });
 
@@ -100,6 +104,9 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
                     try {
 
                         if (!sendData) continue;
+                        Thread.sleep(2000);
+                        listenToPhone = true;
+                        sendData = false;
 
                         int current_end_row;
 
