@@ -13,25 +13,62 @@ import com.google.android.gms.wearable.NodeApi;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.nio.ByteBuffer;
 
-import javax.sql.CommonDataSource;
-
-public class ListenToWearableService extends WearableListenerService {
+public class ListenToWearableService extends WearableListenerService implements GoogleApiClient.ConnectionCallbacks,
+        GoogleApiClient.OnConnectionFailedListener {
 
     private IOSocket socket;
     private AccelerometerListener accelListener;
     private float lastTimestamp = 0;
+    private GoogleApiClient mGoogleApiClient;
 
+    @Override
+    public void onConnected(Bundle bundle) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+
+                NodeApi.GetConnectedNodesResult nodes = Wearable.NodeApi.getConnectedNodes(mGoogleApiClient).await();
+
+                while (true) {
+                    if (Communication.delimeterDetected) {
+                        Communication.delimeterDetected = false;
+                        Log.d("message", "message to watch");
+
+                        // @TODO: debounce delimeter, ensure message gets to watch
+                        try {
+
+                            for (Node node : nodes.getNodes()) {
+
+                                MessageApi.SendMessageResult result = Wearable.MessageApi.sendMessage(mGoogleApiClient, node.getId(), "",new byte[1]).await();
+                            }
+
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+
+                }
+            }
+        }).start();
+    }
 
     @Override
     public void onCreate() {
         socket = Communication.socket;
         socket.connect();
         accelListener = new AccelerometerListener((SensorManager)getSystemService(SENSOR_SERVICE));
+
+        // connect to Companion app
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .addApi(Wearable.API)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .build();
+        mGoogleApiClient.connect();
 
      GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
@@ -60,57 +97,59 @@ public class ListenToWearableService extends WearableListenerService {
         Log.e("PhoneConnection","Phone connected? :"+mGoogleApiClient.isConnected());
 
         Wearable.MessageApi.addListener(mGoogleApiClient, new MessageApi.MessageListener() {
-            float sensorType;
-            float sensorVal1;
-            float sensorVal2;
-            float sensorVal3;
-            float timestamp;
+
             byte[] inboundMessage;
             JSONObject outboundMessage = new JSONObject();
             @Override
             public void onMessageReceived(MessageEvent messageEvent) {
+                if (messageEvent.getData().length == 1) return;
 
-                try {
-//                    JSONObject message = new JSONObject(new String(messageEvent.getData()));
-                    inboundMessage = messageEvent.getData();
-                    sensorType = 0;
-                    sensorVal1 = -999;
-                    sensorVal2 = -999;
-                    sensorVal3 = -999;
-                    timestamp  = -999;
-                    for(int i = 0; i < inboundMessage.length; i+=20) {
-                        sensorType = floatFromBytes(inboundMessage, i);
-                        sensorVal1 = floatFromBytes(inboundMessage, i+4);
-                        sensorVal2 = floatFromBytes(inboundMessage, i+8);
-                        sensorVal3 = floatFromBytes(inboundMessage, i+12);
-                        timestamp  = floatFromBytes(inboundMessage, i+16);
+                inboundMessage = messageEvent.getData();
+                outboundMessage = extractMessage(inboundMessage, outboundMessage);
 
-                        outboundMessage.put("sensor", sensorNameFromId(Math.round(sensorType)));
-                        outboundMessage.put("x", sensorVal1);
-                        outboundMessage.put("y", sensorVal2);
-                        outboundMessage.put("z", sensorVal3);
-                        outboundMessage.put("timestamp", timestamp);
-                        if (socket.isConnected())
-                            socket.emit("gyro", outboundMessage);
-                        if (Communication.delimeterDetected) {
-                            Log.d("DELIMETER", "DELIMETER DETECTED");
-                            emitDelimeter(timestamp);
-                        }
+                if (socket.isConnected()) {
+                    try {
+                        socket.emit("gyro", outboundMessage);
+                    } catch (Exception e) {
+                        Log.e("emitting message", "could not broadcast");
                     }
-
-
-                    // @TODO: put in delimeter
-
-                    if (socket.isConnected()) {
-//                        socket.emit("gyro", message);
-                        Log.d("server", "SENT MESSAGE TO SERVER");
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
                 }
+
             }
         });
 
+    }
+
+    private JSONObject extractMessage(byte[] inboundMessage, JSONObject outboundMessage) {
+        float sensorType;
+        float sensorVal1;
+        float sensorVal2;
+        float sensorVal3;
+        float timestamp;
+
+        sensorType = 0;
+        sensorVal1 = -999;
+        sensorVal2 = -999;
+        sensorVal3 = -999;
+        timestamp  = -999;
+        for(int i = 0; i < inboundMessage.length; i+=20) {
+            sensorType = floatFromBytes(inboundMessage, i);
+            sensorVal1 = floatFromBytes(inboundMessage, i + 4);
+            sensorVal2 = floatFromBytes(inboundMessage, i + 8);
+            sensorVal3 = floatFromBytes(inboundMessage, i + 12);
+            timestamp = floatFromBytes(inboundMessage, i + 16);
+            try {
+                outboundMessage.put("sensor", sensorNameFromId(Math.round(sensorType)));
+                outboundMessage.put("x", sensorVal1);
+                outboundMessage.put("y", sensorVal2);
+                outboundMessage.put("z", sensorVal3);
+                outboundMessage.put("timestamp", timestamp);
+            } catch (Exception e) {
+
+            }
+        }
+
+        return outboundMessage;
     }
 
     private float floatFromBytes(byte[] sourceArray, int start) {
@@ -143,7 +182,6 @@ public class ListenToWearableService extends WearableListenerService {
         }
     }
 
-    // @TODO: move delimeter to end of current message parsing
     private void emitDelimeter(float timestamp) {
         if (timestamp - lastTimestamp < 1000000000) {
             Communication.delimeterDetected = false;
@@ -163,8 +201,15 @@ public class ListenToWearableService extends WearableListenerService {
 
     }
 
+    @Override
+    public void onConnectionSuspended(int i) {
+        Log.e("MsgToSmartcastingApp", "Connection suspended");
+    }
 
-
+    @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+        Log.e("MsgToSmartcastingApp", "Connection Failed");
+    }
 
 }
 
