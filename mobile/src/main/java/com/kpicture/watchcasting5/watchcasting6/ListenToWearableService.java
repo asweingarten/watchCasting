@@ -6,6 +6,7 @@ import android.util.Log;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.wearable.MessageApi;
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Node;
@@ -16,6 +17,7 @@ import com.google.android.gms.wearable.WearableListenerService;
 import org.json.JSONObject;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeUnit;
 
 public class ListenToWearableService extends WearableListenerService implements GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener {
@@ -27,6 +29,7 @@ public class ListenToWearableService extends WearableListenerService implements 
 
     @Override
     public void onConnected(Bundle bundle) {
+        Log.e("MsgToSmartcastingApp", "Succesfully connected to watch");
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -36,7 +39,7 @@ public class ListenToWearableService extends WearableListenerService implements 
                 while (true) {
                     if (Communication.delimeterDetected) {
                         Communication.delimeterDetected = false;
-                        Log.d("message", "message to watch");
+                        Log.d("to watch message", "num nodes: " + nodes.getNodes().size());
 
                         // @TODO: debounce delimeter, ensure message gets to watch
                         try {
@@ -44,6 +47,7 @@ public class ListenToWearableService extends WearableListenerService implements 
                             for (Node node : nodes.getNodes()) {
 
                                 MessageApi.SendMessageResult result = Wearable.MessageApi.sendMessage(mGoogleApiClient, node.getId(), "",new byte[1]).await();
+                                Log.d("to watch message", ""+result.getStatus());
                             }
 
                         } catch (Exception e) {
@@ -62,7 +66,7 @@ public class ListenToWearableService extends WearableListenerService implements 
         socket.connect();
         accelListener = new AccelerometerListener((SensorManager)getSystemService(SENSOR_SERVICE));
 
-        // connect to Companion app
+    // connect to Companion app
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addApi(Wearable.API)
                 .addConnectionCallbacks(this)
@@ -70,29 +74,12 @@ public class ListenToWearableService extends WearableListenerService implements 
                 .build();
         mGoogleApiClient.connect();
 
-     GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(this)
-                .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
-                    @Override
-                    public void onConnected(Bundle connectionHint) {
-                        Log.e("DATA API LOG:", "onConnected: " + connectionHint);
-                        // Now you can use the Data Layer API
-                    }
-                    @Override
-                    public void onConnectionSuspended(int cause) {
-                        Log.e("DATA API LOG:", "onConnectionSuspended: " + cause);
-                    }
-                })
-                .addOnConnectionFailedListener(new GoogleApiClient.OnConnectionFailedListener() {
-                    @Override
-                    public void onConnectionFailed(ConnectionResult result) {
-                        Log.e("DATA API LOG:", "onConnectionFailed: " + result);
-                    }
-                })
-                        // Request access only to the Wearable API
-                .addApi(Wearable.API)
-                .build();
-
-        mGoogleApiClient.connect();
+        Wearable.NodeApi.getConnectedNodes(mGoogleApiClient).setResultCallback(new ResultCallback<NodeApi.GetConnectedNodesResult>() {
+            @Override
+            public void onResult(NodeApi.GetConnectedNodesResult getConnectedNodesResult) {
+                Log.d("nodes", ""+getConnectedNodesResult.getNodes().size());
+            }
+        });
 
         Log.e("PhoneConnection","Phone connected? :"+mGoogleApiClient.isConnected());
 
@@ -106,14 +93,6 @@ public class ListenToWearableService extends WearableListenerService implements 
 
                 inboundMessage = messageEvent.getData();
                 outboundMessage = extractMessage(inboundMessage, outboundMessage);
-
-                if (socket.isConnected()) {
-                    try {
-                        socket.emit("gyro", outboundMessage);
-                    } catch (Exception e) {
-                        Log.e("emitting message", "could not broadcast");
-                    }
-                }
 
             }
         });
@@ -144,6 +123,14 @@ public class ListenToWearableService extends WearableListenerService implements 
                 outboundMessage.put("y", sensorVal2);
                 outboundMessage.put("z", sensorVal3);
                 outboundMessage.put("timestamp", timestamp);
+
+                if (socket.isConnected()) {
+                    try {
+                        socket.emit("gyro", outboundMessage);
+                    } catch (Exception e) {
+                        Log.e("emitting message", "could not broadcast");
+                    }
+                }
             } catch (Exception e) {
 
             }

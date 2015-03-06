@@ -55,6 +55,8 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
             babs[i][3] = 0;
             babs[i][4] = 0;
         }
+
+
         // connect to Companion app
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addApi(Wearable.API)
@@ -67,27 +69,17 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
             @Override
             public void onMessageReceived(MessageEvent messageEvent) {
                 Log.d("MESSAGE RECEIVED", "FROM PHONE");
-                if (messageEvent.getData().length == 1 && listenToPhone)
+                if (messageEvent.getData().length == 1 && listenToPhone) {
                     Log.d("MESSAGE RECEIVED", "WE LISTENED");
                     listenToPhone = false;
                     sendData = !sendData;
+                }
             }
         });
 
     }
 
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-
-        return Service.START_NOT_STICKY;
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        // TODO: Return the communication channel to the service.
-        return null;
-        //throw new UnsupportedOperationException("Not yet implemented");
-    }
+    // @TODO: determine which node is phone and which is watch
 
     @Override
     public void onConnected(Bundle bundle) {
@@ -159,16 +151,6 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
     }
 
     @Override
-    public void onConnectionSuspended(int i) {
-        Log.e("MsgToSmartcastingApp", "Connection suspended");
-    }
-
-    @Override
-    public void onConnectionFailed(ConnectionResult connectionResult) {
-        Log.e("MsgToSmartcastingApp", "Connection Failed");
-    }
-
-    @Override
     public void onSensorChanged(SensorEvent event) {
 
         if (!sendData) return;
@@ -212,5 +194,28 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
         Log.e("WearableSensor", "Accuracy of sensor changed");
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+        Log.e("MsgToSmartcastingApp", "Connection suspended");
+    }
+
+    @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+        Log.e("MsgToSmartcastingApp", "Connection Failed");
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+
+        return Service.START_NOT_STICKY;
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        // TODO: Return the communication channel to the service.
+        return null;
+        //throw new UnsupportedOperationException("Not yet implemented");
     }
 }
