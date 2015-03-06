@@ -56,7 +56,6 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
             babs[i][4] = 0;
         }
 
-
         // connect to Companion app
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addApi(Wearable.API)
@@ -183,13 +182,20 @@ public class GyroRead extends Service implements SensorEventListener, GoogleApiC
                 babs[end_row][2] = event.values[1];
                 babs[end_row][3] = event.values[2];
                 babs[end_row][4] = (float) event.timestamp;
+                break;
+            case Sensor.TYPE_GYROSCOPE:
+                babs[end_row][0] = 5;
+                babs[end_row][1] = event.values[0];
+                babs[end_row][2] = event.values[1];
+                babs[end_row][3] = event.values[2];
+                babs[end_row][4] = (float) event.timestamp;
+                break;
             default:
                 return;
         }
         end_row = (end_row + 1) % BUFFER_SIZE;
 
     }
-
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
